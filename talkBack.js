@@ -17,6 +17,7 @@ var ID = "";
 
 module.exports.talkback = function (data, token, url, space, user_db) {
   console.log("Entered talkBack.talkback");
+  console.log("Provided data is " + data);
   var msg_id = data.messageId;
   var body = "{ message (id: \"" + msg_id + "\")" +
     "{ createdBy { displayName id }" +
@@ -42,15 +43,12 @@ module.exports.talkback = function (data, token, url, space, user_db) {
     console.log("Alchemy keywords are: " + WKeywords.toString());
     // The message text is UTF-8, so we need to first decode it to be safe.
     var message = decode_utf8(data.content);
-    // See if we have a number in the text, and if we do, assume it's a ticket
-    // number.
     var re = /[0-9]+/;
     if (message.match(re)) {
       ID = message.match(re)[0];
       console.log("Extracted ticket number " + ID);
     }
 
-    // Possible queries we might receive:
     // "Luke, show me my tickets"
     // "Give me more information on ticket 56 Luke"
     // "What tickets are open right now Luke"
@@ -72,16 +70,14 @@ module.exports.talkback = function (data, token, url, space, user_db) {
           var id = res.results[0].id;
           var status = res.results[0].status;
           var description = res.results[0].description;
-          // Obtaining the associated comments for a given ticket requires an
-          // additional API call to be made.
+          // Make another call to grab the comments
           var query = "tickets/" + ID + "/comments.json?sort_order=desc";
           zendesk.callZendesk(query, function (err, res) {
-            var comment = "";
-            var author = "";
+            comment = "";
             if (!err) {
               if (res.comments) {
                 comment = res.comments[0].body;
-                var author_id = res.comments[0].author_id;
+                author_id = res.comments[0].author_id;
                 author = user_db[author_id];
               }
             }
@@ -122,7 +118,6 @@ module.exports.talkback = function (data, token, url, space, user_db) {
               "_)\n";
           }
         }
-        // The slice removes the trailing newline character.
         ww.sendMessage(msg.slice(0,-1), '#016F4A', url, space, token);
       });
     } else if (message.includes("open") && message.includes("tickets")) {
@@ -142,12 +137,7 @@ module.exports.talkback = function (data, token, url, space, user_db) {
             user_db[res.results[x].assignee_id] + "\n";
         }
         ww.sendMessage(msg.slice(0,-1), '#016F4A', url, space, token);
-        // It's possible that there are more open tickets than can be obtained
-        // in a single call -- the presence of the "next_page" field with a
-        // valid url value indicates if that is the case. If there is another
-        // page of results, we set our global variable to that url and notify
-        // the space that there is another page available. If someone asks for
-        // it, then we use the url value of "next_page" to retrieve them.
+        // We need to check next page
         if (res.next_page) {
           next_page = res.next_page;
           msg = "Some results omitted. Ask for the next page if desired.";
@@ -165,13 +155,14 @@ module.exports.talkback = function (data, token, url, space, user_db) {
             'Accept': "application/json"
           }
         };
+        console.log("Performing Zendesk API call with " + JSON.stringify(options));
         request(options, function (err, res, body) {
           if (err) {
-            console.log("Failed to retrieve next page.");
+            console.log("Failed to retrieve next page");
             return;
           }
           data = JSON.parse(body);
-          console.log("Next page was retrieved.");
+          console.log("Next page retrieved");
           for (var x = 0; x < data.results.length; x++) {
             msg += "*ID: " +
               data.results[x].id +
@@ -188,22 +179,18 @@ module.exports.talkback = function (data, token, url, space, user_db) {
         });
       }
     } else {
-      console.log("We received a request we did not understand. Sending help message.");
+      console.log("Reached else");
       msg = help();
       ww.sendMessage(msg, '#016F4A', url, space, token);
     }
   });
 };
 
-// Stolen from Stack Overflow
 function decode_utf8(s) {
-  console.log("Entered talkback.decode_utf8.");
   return unescape(encodeURIComponent(s));
 }
 
-// Also stolen from Stack Overflow
 function contains(array, obj) {
-  console.log("Entered talkback.contains.");
   for (var i = 0; i < array.length; i++) {
     if (array[i] === obj) {
       return true;
@@ -213,7 +200,6 @@ function contains(array, obj) {
 }
 
 function help() {
-  console.log("Entered talkback.help.");
   return "You can ask me for open tickets, your tickets, or details about " +
     "an existing ticket if you know the ID number.";
 }
